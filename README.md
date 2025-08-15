@@ -1,2 +1,3 @@
-# lfp-decoding-project
-picking up from last project done by previous students
+"# Final Project in EE" 
+
+All models are in the patient's folder
