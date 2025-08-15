@@ -19,12 +19,15 @@ from sklearn.metrics import confusion_matrix
 import os
 os.environ["KMP_DUPLICATE_LIB_OK"] = "True"
 
+SEED = 42
+random.seed(SEED); np.random.seed(SEED); torch.manual_seed(SEED)
 
 # --------------------------------------- Global Parameters -----------------------------------------------------
-patientData = r"C:\Users\asus\OneDrive\מסמכים\לימודים\פרויקט גמר\Code\Recordings\patient4_ConvertedData_noTables.mat"
-# patientData = r"C:\Users\OneDrive\FinalProject\Recordings\patient2_ConvertedData_noTables.mat"
+#choose model and patient
 
-patient_num = 4
+
+patient_num = 1
+patientData = rf"C:\Users\safra\Documents\לימודים\פרויקט קיץ 2025\DeepLearningProject-master-ido\Recordings\patient{patient_num}_ConvertedData_noTables.mat"
 result_str = "patient"+str(patient_num)+"_Wl_"  # for the main: text to add in the saved files
 
 use_saved_model = False
@@ -35,63 +38,57 @@ save_new_model = True
 save_path = result_str+"model.pth"
 
 # Hyper parameters
-epoches = 25  # Recommended: 30 for small datasets. for patients 4/5: 100 # for 2 vowels: 40
+#MODEL architecture
+epoches = 60  # Recommended: 30 for small datasets. for patients 4/5: 100 # for 2 vowels: 40
 num_lstm_layers = 1
-batch_size = 4  # for patients 4/5: 10
-learning_rate = 0.02  # default 0.045
-hidden_state_size = 8  # Hidden state size for the LSTM
-ICA_filter_comp = 0.5
-
-
-weaken_vowels = True
-vowels_to_weaken = ['A']
-recs_num_to_weaken = 5  # integer between 1 and 4
-
-vowels_toRun = ['A', 'O']  # ['A', 'E', 'I', 'O', 'U']
-remove_vowels_from_test_only = False  # if True: training on all vowels
-# for 2 vowels only: 20-40 epoches, 3-5 BS, 5-6 hidden, 0.8 ICA.
-
-ICA_to_all_trials = True
-
-
-Channel2_only = False
-if Channel2_only:
-    ICA_to_all_trials = False
-
-Channel1_only = False
-if Channel1_only:
-    ICA_to_all_trials = False
-
-UnBalanced_train = True  # include all train data
-UnBalanced_test = False  # include all train data
-
-
-
-
+batch_size = 9  # for patients 4/5: 10
+learning_rate = 0.045  # default 0.045
+hidden_state_size = 7  # Hidden state size for the LSTM
+dropout_flag = True
+p_dropout = 0.1 # chance to zero the neuron
 pos_weight = torch.tensor([4.0])  # Adding extra weight to positive examples, to compensate for the 40_non_U vs 10_U
 criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight)  # was: nn.CrossEntropyLoss(), but it doesnt work with one-hot encoded labels.
+n_channels = 2
+n_vowels = 5  # hard coded
+possible_classifications = ['None', 'A', 'E', 'I', 'O', 'U']
+input_tensor_size = n_channels  # Number of input features
+output_size = len(possible_classifications)  # Number of classes for classification
 
-# Preprocessing
-normalize_flag = True
 
-
-components = [[59, 73, 85, 99], [4, 21, 36, 79, 94], [18, 36, 74, 54, 62], [87, 127], [192], [0, 40, 68, 75, 85]]
-# noise_components = [59, 73, 85, 99]  # for patient2. 45, 32, not included cause of not clean edges
-# noise_components = [4, 21, 36, 79, 94]  # for patient1. 69, not included
-# noise_components = [18, 36, 74, 54, 62]  # for patient3.
-# noise_components = [87, 127]  # for patient4.
-# noise_components = [192]  # for patient5.
-# noise_components = [0, 40, 68, 75, 85]  # for patient6
-noise_components = components[patient_num-1]  # start from 0=patient1
-
+#training and testing
+UnBalanced_train = False  # include all train data
+UnBalanced_test = False  # include all train data
 training_set_perc = 0.7  # percent of the data that used for training
 
 
-n_channels = 2
-n_vowels = 5  # hard coded
-possibls_classifications = ['None', 'A', 'E', 'I', 'O', 'U']
-input_tensor_size = n_channels  # Number of input features
-output_size = len(possibls_classifications)  # Number of classes for classification
+#preproccesing
+ICA_to_all_trials = True
+ICA_filter_comp = 0.7
+normalize_flag = True
+components = [[59, 73, 85, 99], [4, 21, 36, 79, 94], [18, 36, 74, 54, 62], [87, 127], [192], [0, 40, 68, 75, 85]]
+noise_components = components[patient_num-1]  # start from 0=patient1
+# noise_components = [59, 73, 85, 99]  # for patient2. 45, 32, not included cause of not clean edges
+# noise_components = [4, 21, 36, 79, 94]  # for patient1. 69, not included
+# noise_components = [18, 36, 74, 54, 62]  # for patient3.
+#noise_components = [87, 127]  # for patient4.
+# noise_components = [192]  # for patient5.
+# noise_components = [0, 40, 68, 75, 85]  # for patient6
+
+#choose channels
+Channel2_only = False
+Channel1_only = False
+if Channel2_only or Channel1_only:
+    ICA_to_all_trials = False
+
+
+#vowel balance
+vowels_toRun = ['A', 'E', 'I', 'O', 'U']  # ['A', 'E', 'I', 'O', 'U']
+remove_vowels_from_test_only = False  # if True: training on all vowels
+# for 2 vowels only: 20-40 epoches, 3-5 BS, 5-6 hidden, 0.8 ICA.
+weaken_vowels = True
+vowels_to_weaken = ['A']
+recs_num_to_weaken = 3  # integer between 1 and 4
+
 
 # Archived preprocessing:
 aggregate_to_bins_flag = False
@@ -101,8 +98,7 @@ PCA_flag = False
 ICA_flag = False
 # comp_to_reduce = 1  # ICA_flag: 1 for patient2, 0 for patient1
 # ICA_filter_comp = 0.3  # ICA_flag :0.3 for patient2, 0.7 for patient1, 0.5 is default
-dropout_flag = False
-p_dropout = 0.5  # chance to zero the neuron
+
 
 data = scipy.io.loadmat(patientData)
 '''
@@ -151,7 +147,7 @@ def optimizeLoop(patient_num): #loops through possible hyperparameters and finds
         for batch_size in batch_size_values:
             # set up data loader- has no memory so can be done once for each batch size
             sampler = StratifiedBatchSampler(train_dataset, batch_size=batch_size,
-                                             num_labels=len(possibls_classifications))  # 1+5= num of vowels in the dataset
+                                             num_labels=len(possible_classifications))  # 1+5= num of vowels in the dataset
             dataloader = DataLoader(dataset=train_dataset, sampler=sampler, batch_size=1)  # , num_workers=1)
 
             num_of_training_trials = len(train_dataset)
@@ -420,13 +416,13 @@ def get_classification(output):   # made changes for lstm !!!
         classification_index = 1 + torch.argmax(output[1:])
 
     # Use the index to get the corresponding classification
-    classification = possibls_classifications[classification_index]
+    classification = possible_classifications[classification_index]
 
     return classification
-    # classification = possibls_classifications[torch.argmax(output)]
-    # # classification = possibls_classifications[torch.argmin(output)]
+    # classification = possible_classifications[torch.argmax(output)]
+    # # classification = possible_classifications[torch.argmin(output)]
     # if torch.argmax(output) == 0:  # if None and A are both highest, it is an A
-    #     classification = possibls_classifications[1+torch.argmax(output[1:])]
+    #     classification = possible_classifications[1+torch.argmax(output[1:])]
     # return classification  # ideal output will be a vector with 1 index, like: 100010
 
 
@@ -725,7 +721,7 @@ def create_n_run_models(epoches, num_lstm_layers, batch_size, learning_rate, hid
         special_train_dataset = patient_TrainingDataset(dict_patient)
         special_test_set = patient_Testset(dict_patient)
 
-        sampler = StratifiedBatchSampler(special_train_dataset, batch_size=batch_size, num_labels=len(possibls_classifications))
+        sampler = StratifiedBatchSampler(special_train_dataset, batch_size=batch_size, num_labels=len(possible_classifications))
         dataloader = DataLoader(dataset=special_train_dataset, sampler=sampler, batch_size=1)
         num_of_training_trials = len(special_train_dataset)
         n_iterations = math.ceil(num_of_training_trials / batch_size)  # iterations per epoch
@@ -820,10 +816,10 @@ class patient_TrainingDataset(Dataset):
                 all_concatedLFP_of_patient.append(concatedLFP)  # Append each trial to the list
 
                 # Generate ideal output for one trial
-                ideal_output = torch.zeros(len(possibls_classifications), dtype=torch.float32)
+                ideal_output = torch.zeros(len(possible_classifications), dtype=torch.float32)
                 ideal_output[0] = 1  # Always include vowel presence
 
-                ideal_output[possibls_classifications.index(trial_data["label"])] = 1  # Set the correct vowel class to 1
+                ideal_output[possible_classifications.index(trial_data["label"])] = 1  # Set the correct vowel class to 1
 
                 # Expand the ideal_output to match the sequence length
                 sequence_length = 8000  # TODO- should not be hard-coded
@@ -869,9 +865,9 @@ class patient_Testset(Dataset):
                 all_concatedLFP_of_patient.append(concatedLFP)  # Append each trial to the list
 
                 # Generate ideal output for one trial
-                ideal_output = torch.zeros(len(possibls_classifications), dtype=torch.float32)
+                ideal_output = torch.zeros(len(possible_classifications), dtype=torch.float32)
                 ideal_output[0] = 1  # Always include vowel presence
-                ideal_output[possibls_classifications.index(trial_data["label"])] = 1  # Set the correct vowel class to 1
+                ideal_output[possible_classifications.index(trial_data["label"])] = 1  # Set the correct vowel class to 1
 
                 # Expand the ideal_output to match the sequence length
                 sequence_length = 8000  # TODO- should not be hard-coded
@@ -964,6 +960,7 @@ class StratifiedBatchSampler(Sampler):
 def main_lstm(data):
     dict_patient1 = create_patient_dict(data['VowelsCellArray'])
     if ICA_to_all_trials:
+        print ("ran with ICA to all trials")
         dict_patient1 = apply_ICA_allTrials(dict_patient1, noise_components, ICA_filter_comp)
         ICA_flag = False  # to make sure not ICA twice
 
@@ -976,7 +973,7 @@ def main_lstm(data):
     for index in range(1, 2):  # Optimization loop, not used now
 
         sampler = StratifiedBatchSampler(train_dataset, batch_size=batch_size,
-                                         num_labels=len(possibls_classifications))  # 1+5= num of vowels in the dataset
+                                         num_labels=len(possible_classifications))  # 1+5= num of vowels in the dataset
         dataloader = DataLoader(dataset=train_dataset, sampler=sampler, batch_size=1)  # , num_workers=1)
 
         # Set up the LSTM
@@ -984,6 +981,7 @@ def main_lstm(data):
         optimizer = torch.optim.Adam(lstm.parameters(), lr=learning_rate, betas=(0.9, 0.999), eps=1e-08)
 
         if use_saved_model:
+            print ("loading model from "+ load_path)
             load_model(lstm, optimizer, load_path)
 
         # Batches Training Loop
@@ -1058,375 +1056,5 @@ def main_lstm(data):
 create_n_run_models(epoches, num_lstm_layers, batch_size, learning_rate, hidden_state_size, ICA_filter_comp, patient_num, vowels_toRun)
 
 # dict_patient1 = create_patient_dict(data['VowelsCellArray'])
-# plot_error_graph(dict_patient1, possibls_classifications)
+# plot_error_graph(dict_patient1, possible_classifications)
 
-
-# ----------------------------------------------- draft ---------------------------------------------------
-
-# channel1_all_data = data['VowelsCellArray'][:, 0]  # first electrode
-# channel2_all_data = data['VowelsCellArray'][:, 1]  # second
-# labeling = data['VowelsCellArray'][:, 2]  # ground truth
-
-
-# plt.plot(time_vec1, trial_1_LFPvec, label="Trial 1 LFP")  # ,marker='o' adds circles at each data point
-# plt.plot(time_vec2, trial_2_LFPvec, label="Trial 2 LFP")  # ,marker='o' adds circles at each data point
-# plt.xlabel("Time [sec]")
-# plt.ylabel("LFP")
-# plt.title("Channel Comparison ")
-# plt.grid(True)  # Add a grid for better readability (optional)
-# plt.legend()
-# plt.show()  # Display the plot
-
-# -----------------------------------------------Archive----------------------------------------------------------
-
-class RNN(nn.Module):
-    # nn.RNN
-    def __init__(self, input_size, hidden_size, output_size):
-        # initializing the NN
-        super(RNN, self).__init__()
-
-        self.hidden_size = hidden_size
-        combined_size = input_size + hidden_size  # size of the input and hidden combined, which will be the input of the layers
-        self.input2hidden = nn.Linear(combined_size, hidden_size)
-        self.input2output = nn.Linear(combined_size, output_size)
-        self.stabilizer = nn.LogSoftmax()
-
-    def init_hidden(self):
-        return torch.zeros(self.hidden_size)  # dim 0 size must fit dim 0 of input tensor #TODO: 2->n_channels
-
-    def forward(self, input_tensor, hidden_tensor):
-        combined = torch.cat((input_tensor, hidden_tensor), 0)  # concatenating the input and hidden tensors
-        # combined = torch.transpose(combined, 0, 1)  # to make it 1X4 instead of 4X1
-        hidden = self.input2hidden(combined)
-        output = self.input2output(combined)
-
-        # output = self.stabilizer(output)  #TODO
-        return output, hidden
-
-
-def list_filter(unfiltered_list, new_list, time_unfiltered, time_list):
-    # Not used in main currently
-    for i in range(len(unfiltered_list)):
-        new_list.append(unfiltered_list[i][0][0])
-
-        item = time_unfiltered[i][0]
-        if isinstance(item, str):  # If item is a string
-            number = float(item.strip().replace(' sec', ''))
-        else:  # If it's already a number
-            number = float(item)
-        time_list.append(number)
-
-
-def LFP_to_tensor(trial):
-    # Not used
-    len_of_LFP_vec = len(trial["LFP_vec_CH1"])
-    tensor = torch.zeros(n_channels, len_of_LFP_vec)
-    for num in range(1, n_channels +1):
-        for i in range(len_of_LFP_vec):
-            tensor[num-1][i] = trial[f'LFP_vec_CH{num}'][i]
-    return tensor
-
-
-def random_trial_for_train(dict_patient1):
-    # get a random record to train on
-    max_key_num = max(dict_patient1)
-    num = random.randint(0, max_key_num)
-    while dict_patient1[num]["training_flag"] == 0:
-        num = random.randint(0, max_key_num)
-    ideal_output = torch.zeros(1, len(possibls_classifications))
-    ideal_output[0, 0] = 1  # because there is a vowel in the GT
-    ideal_output[0, possibls_classifications.index(dict_patient1[num]["label"])] = 1  # put 1 where the right vowel is
-    return dict_patient1[num]["label"], num, ideal_output, dict_patient1[num]
-
-
-def get_trial_for_training(dict_patient1, last_train_ind):
-    # get the next record to train on
-    max_key_num = max(dict_patient1)
-    num = last_train_ind + 1
-    while num < max_key_num and dict_patient1[num]["training_flag"] == 0:
-        num += 1
-    if num == max_key_num:
-        print('Attention- last training record in patient dictionary')  # doesnt get here cause number of trainng records is fixed in advance
-    ideal_output = torch.zeros(len(possibls_classifications))
-    ideal_output[0] = 1  # because there is a vowel in the GT  #TODO: check with and without this line
-    ideal_output[possibls_classifications.index(dict_patient1[num]["label"])] = 1  # put 1 where the right vowel is
-    return dict_patient1[num]["label"], num, ideal_output, dict_patient1[num]
-    # TODO: create ideal tensor for the whole sequence, now it is just the end
-
-
-def create_test_dict(dict_patient):
-    test_dict = {}
-    for trial_num, trial_dict in dict_patient.items():
-        if trial_dict["training_flag"]:
-            continue
-        else:
-            test_dict[trial_num] = trial_dict
-    return test_dict
-
-
-def single_LFP_to_tensor(trial, i):
-    tensor = torch.zeros(n_channels)
-    for num in range(1, n_channels + 1):
-        tensor[num-1] = trial[f'LFP_vec_CH{num}'][i]
-    return tensor
-
-
-def run_RNN_on_trial_dict(rnn, trial_dict):
-    hidden = rnn.init_hidden(batch_size)
-    input_vector_size = len(trial_dict[f'LFP_vec_CH1'])  # assuming all channels have the same length
-    for i in range(input_vector_size):
-        input_tensor = single_LFP_to_tensor(trial_dict, i)
-        output, hidden = rnn(input_tensor, hidden)
-
-    return output
-
-def train(rnn, trial_dict, ideal_output_tensor, optimizer):
-    output = run_RNN_on_trial_dict(rnn, trial_dict)
-
-    loss = criterion(output, ideal_output_tensor)
-    optimizer.zero_grad()
-    loss.backward()
-    optimizer.step()
-
-    return output, loss.item()  # .item() gives value of the tensor
-
-
-def calculate_accuracy(rnn, data_dict):
-    # Calculate the accuracy of the model on a given dataset.
-    correct = 0
-    total = 0
-    trials_tested = []
-    ground_truth = []
-    outputs = []
-    predicted_labels = []
-
-    for trial_num, trial_dict in data_dict.items():
-        trials_tested.append(trial_num)
-        output = run_RNN_on_trial_dict(rnn, trial_dict)  # Run the RNN on the current trial data
-        outputs.append(output)
-
-        predicted_label = get_classification(output)  # Model's predicted classification
-        predicted_labels.append(predicted_label)
-
-        true_label = trial_dict["label"]  # The true label from the trial
-        ground_truth.append(true_label)
-
-        if predicted_label == true_label:  # Check if the prediction matches the true label
-            correct += 1
-        total += 1
-
-    # Create results df
-    results_df = pd.DataFrame({"Trial Tested": trials_tested, "Actual Label": ground_truth, "Predicted Label": predicted_labels, "Output Tensor": outputs})
-
-    # Calculate accuracy as a percentage
-    accuracy = (correct / total) * 100
-    print(f"Accuracy: {accuracy:.2f}% ({correct}/{total})")
-    return accuracy, results_df
-
-
-def main(data):
-
-    dict_patient1 = create_patient_dict(data['VowelsCellArray'])
-
-    # maybe: check options for encripting these to values to a different input form
-
-    input_tensor_size = n_channels  # after for loop it will be (n_channels, input_vector_size)
-    hidden_state_size = 16  # arbitrary! can be:(n_channels, hidden_size_for_channel)  # we have here extra freedom degree, to enable the concatenation of input and hidden
-    output_size = (len(possibls_classifications))  # vector in len 6:(isTalking, A, E, I, O, U)
-
-    # # set up the RNN
-    # rnn = RNN(input_tensor_size, hidden_state_size, output_size)
-    # optimizer = torch.optim.Adam(rnn.parameters(), lr=learning_rate, betas=(0.9, 0.999), eps=1e-08)  #  optimizer = torch.optim.SGD(rnn.parameters(), lr=learning_rate)
-
-    # Set up the LSTM
-    lstm = LSTM(input_tensor_size, hidden_state_size, output_size)
-    optimizer = torch.optim.Adam(lstm.parameters(), lr=learning_rate, betas=(0.9, 0.999), eps=1e-08)
-
-    # Path for saving/loading the model
-    # save_path = "rnn_model_checkpoint.pth"
-    # try:
-    #     load_model(rnn, optimizer, save_path)
-    #     print("Checkpoint loaded. Continuing training...")
-    # except FileNotFoundError:
-    #     print("No checkpoint found. Starting training from scratch.")
-
-    output = run_RNN_on_trial_dict(rnn, dict_patient1[0])  # dict_patient1[0] is a trial dict for example
-    print(get_classification(output))
-
-    # ------------------------------------------------------Training---------------------------------------------------
-    current_loss = 0
-    all_loses = []
-    epoches = 30  # recommended 10-30 for small datasets like ours
-    num_of_training_trials = sum(1 for trial_dict in dict_patient1.values() if trial_dict.get("training_flag") == 1)
-    plot_steps, print_steps = 15, 50
-    # prev_trial_num = 0
-    for j in range(epoches):
-        last_train_ind = -1  # so that the first index to train will be 0
-        for i in range(num_of_training_trials):
-            GT_vowel, trial_num, ideal_output_tensor, trial_dict = get_trial_for_training(dict_patient1, last_train_ind)
-            last_train_ind = trial_num
-
-            # GT_vowel, trial_num, ideal_output_tensor, trial_dict = random_trial_for_train(dict_patient1)  # get a random record to train on
-
-            # if trial_num == prev_trial_num:
-            #     GT_vowel, trial_num, ideal_output_tensor, trial_dict = random_trial_for_train(
-            #         dict_patient1)  # get a random record to train on
-            # prev_trial_num = trial_num
-
-            output, loss = train(rnn, trial_dict, ideal_output_tensor, optimizer)
-            current_loss += loss
-
-            if (i + 1) % plot_steps == 0:  # every 100 steps we append the loss
-                all_loses.append(current_loss / plot_steps)  # average
-                current_loss = 0
-                print(trial_num)
-                # print(rnn.input2hidden.weight)
-                # print(rnn.input2output.weight)
-                print(loss)
-
-            # if (i + 1) % print_steps == 0:  # every 500 steps we print
-                guess = get_classification(output)
-                success = "CORRECT" if guess == GT_vowel else f"WRONG ({GT_vowel} is the correct vowel)"
-                print(f"{i} {i / num_of_training_trials * 100}% , loss={loss:.4f} trial={trial_num} / guess={guess}  {success}")
-                # save_model(rnn, optimizer, save_path)  # Save the model checkpoint
-        # Final save of the model
-        # save_model(rnn, optimizer, save_path)
-        # plt.figure()
-        # plt.plot(all_loses)
-        # plt.show()
-
-        print('epoche num:', j)
-    plt.figure()
-    plt.plot(all_loses)
-    plt.show()
-    print('ok')
-
-
-    # ------------------------------------------------------Testing---------------------------------------------------
-    test_set_dict = create_test_dict(dict_patient1)
-
-    accuracy, results_df = calculate_accuracy(rnn, test_set_dict)
-    excel_file = "rnn_test_results.xlsx"
-    results_df.to_excel(excel_file, index=False)
-
-    print(results_df)
-
-
-def getSeqLen(train_dataset):
-    trial_obj = train_dataset[0] # TODO- robust to get the minimal length in dataset
-    seq_length = len(trial_obj[0])  # trial_obj[0] gives the LFP vectors, trial_obj[0][700] gives tensor in size 2. trial_obj[1] gives the label
-    return seq_length
-
-
-def get_trial_for_training_lstm(dict_patient1, last_train_ind):
-    # get the next record to train on
-    max_key_num = max(dict_patient1)
-    num = last_train_ind + 1
-    while num < max_key_num and dict_patient1[num]["training_flag"] == 0:
-        num += 1
-    if num == max_key_num:
-        print('Attention- last training record in patient dictionary')  # doesn't get here cause number of training records is fixed in advance
-
-    # Create one-hot encoding for the ground truth vowel
-    ideal_output = torch.zeros(len(possibls_classifications))
-    ideal_output[0] = 1  # because there is a vowel in the GT (this may or may not be needed)
-    ideal_output[possibls_classifications.index(dict_patient1[num]["label"])] = 1  # put 1 where the right vowel is
-
-    # Add batch dimension (shape should be [1, num_classes])
-    ideal_output = ideal_output.unsqueeze(0)  # Adding batch dimension
-
-    return dict_patient1[num]["label"], num, ideal_output, dict_patient1[num]
-
-
-def apply_PCA(LFP_vec_CH1, LFP_vec_CH2):
-    lfp_single_trial = np.stack([LFP_vec_CH1, LFP_vec_CH2], axis=1)  # Shape: (8000, 2)
-    pca = PCA(n_components=n_channels)
-    lfp_pca = pca.fit_transform(lfp_single_trial)  # (time x channels)
-    # lfp_pca = lfp_pca.T  # Convert back to (channels x time)
-
-    # # Plot PCA components
-    # plt.figure(figsize=(10, 4))
-    # plt.plot(lfp_pca[:, 0], label="PCA Component 1")
-    # plt.plot(lfp_pca[:, 1], label="PCA Component 2")
-    # plt.legend()
-    # plt.title("PCA Components of LFP")
-    # plt.show()
-
-    lfp_pca[:, 0] = lfp_pca[:, 0] * PCA_filter_first_comp
-    cleaned_lfp = pca.inverse_transform(lfp_pca)
-
-    return cleaned_lfp  # (time x channels)
-
-
-def apply_ICA(LFP_vec_CH1, LFP_vec_CH2):
-    # input: a single trial (8000 timepoints, 2 channels)
-    # output: filtered trial (8000 X 2)
-    lfp_single_trial = np.stack([LFP_vec_CH1, LFP_vec_CH2], axis=1)  # Shape: (8000, 2)
-
-    # Apply ICA to extract independent sources
-    ica = FastICA(n_components=n_channels, random_state=42, max_iter=300, tol=1e-3)
-
-    try:
-        with warnings.catch_warnings(record=True) as w:
-            warnings.simplefilter("always", category=UserWarning)
-
-            lfp_ica = ica.fit_transform(lfp_single_trial)  # output Shape: (8000, 2)
-
-            # Check if a ConvergenceWarning was raised
-            if any(issubclass(warn.category, UserWarning) and "FastICA did not converge" in str(warn.message) for warn
-                   in w):
-                print("ICA did not converge. Discarding results.")
-                return np.stack([LFP_vec_CH1, LFP_vec_CH2], axis=1)  # Discard ICA output
-
-            # The components represent independent signals
-            lfp_cleaned = lfp_ica  # If needed, you can remove unwanted components and inverse transform
-            lfp_cleaned[:, comp_to_reduce] = lfp_ica[:, comp_to_reduce] * ICA_filter_comp
-            lfp_cleaned = ica.inverse_transform(lfp_cleaned)
-
-            # # Plot before and after ICA
-            # plt.figure(figsize=(10, 5))
-            # plt.plot(lfp_single_trial[:, 0], label="Noisy Signal", alpha=0.5)
-            # plt.plot(lfp_single_trial[:, 1], label="Noisy Signal2", alpha=0.5)
-            # plt.plot(lfp_ica[:, 0], label="first component reduced (ICA)", linewidth=1)
-            # plt.plot(lfp_ica[:, 1], label="second component  (ICA)", linewidth=1)
-            #
-            # plt.plot(lfp_cleaned[:, 0], label="Cleaned Signal (ICA) CH1", linewidth=2)
-            # plt.plot(lfp_cleaned[:, 1], label="Cleaned Signal (ICA) CH2", linewidth=2)
-            # plt.legend()
-            # plt.xlabel("Time Points")
-            # plt.ylabel("Amplitude")
-            # plt.title("ICA Artifact Removal in LFP Signals")
-            # plt.show()
-
-            # fs = 2000 # 8000/4 sec
-            # ica_components = lfp_ica.T
-            # num_components = ica_components.shape[0]
-            # plt.figure(figsize=(12, 6))
-            #
-            # for i in range(num_components):
-            #     f, Pxx = welch(ica_components[i], fs=fs, nperseg=1024)
-            #     plt.semilogy(f, Pxx, label=f'Component {i}')
-            #
-            # plt.xlabel('Frequency (Hz)')
-            # plt.ylabel('Power Spectral Density (dB/Hz)')
-            # plt.title('PSD of ICA Components')
-            # plt.legend()
-            # plt.grid()
-            # plt.show()
-
-            # lfp_cleaned = lfp_cleaned[:, :2]  # take only the original channels
-            return lfp_cleaned
-
-    except Exception as e:
-        print(f"ICA failed due to error: {e}")
-        return None
-
-
-def get_classification_during_run(output):
-    print(output)
-    classification = possibls_classifications[torch.argmax(output)]
-    if torch.argmax(output) == 0:  # if None and A are both highest, it is an A
-        classification = possibls_classifications[1+torch.argmax(output[1:])]
-    return classification  # ideal output will be a vector with 1 index, like: 100010
-
-# -----------------------------------------------End of Archive-------------------------------------------------------
