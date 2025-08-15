@@ -20,6 +20,9 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 import os
 os.environ["KMP_DUPLICATE_LIB_OK"] = "True"
 
+# Base directory for all result folders
+BASE_OUTPUT_DIR = r"C:\\Users\\safra\\Documents\\לימודים\\פרויקט קיץ 2025\\DeepLearningProject-master-ido"
+
 
 # --------------------------------------- Global Parameters -----------------------------------------------------
 patientData = r"C:\Users\asus\OneDrive\מסמכים\לימודים\פרויקט גמר\Code\Recordings\patient4_ConvertedData_noTables.mat"
@@ -1047,6 +1050,22 @@ def save_confusion_matrix(cm, labels, path_base):
 
 
 def run_patient(patient_number, data_path):
+    """Train and evaluate a single patient.
+
+    Parameters
+    ----------
+    patient_number : int
+        Identifier used for naming outputs and choosing hyperparameters.
+    data_path : str
+        Path to the patient's ``.mat`` data file.
+
+    Returns
+    -------
+    tuple
+        ``(patient_number, accuracy)`` where accuracy is the average test
+        accuracy in percent.
+    """
+
     global patientData, patient_num, noise_components
     patientData = data_path
     patient_num = patient_number
@@ -1057,7 +1076,7 @@ def run_patient(patient_number, data_path):
 
     timestamp = time.strftime("%Y%m%d-%H%M%S")
     folder_name = f"patient{patient_number}_{timestamp}_{accuracy:.2f}"
-    output_dir = os.path.join("results", folder_name)
+    output_dir = os.path.join(BASE_OUTPUT_DIR, folder_name)
     os.makedirs(output_dir, exist_ok=True)
 
     results_df.to_excel(os.path.join(output_dir, "results.xlsx"), index=False)
@@ -1072,6 +1091,14 @@ def run_patient(patient_number, data_path):
 
 
 def run_patients_parallel(patients):
+    """Run multiple patients concurrently.
+
+    Parameters
+    ----------
+    patients : iterable of tuples
+        Each tuple should contain ``(patient_number, path_to_mat_file)``.
+    """
+
     with ProcessPoolExecutor() as executor:
         futures = [executor.submit(run_patient, num, path) for num, path in patients]
         for future in as_completed(futures):
@@ -1082,10 +1109,14 @@ def run_patients_parallel(patients):
 # ----------------------------------------------- draft ---------------------------------------------------
 
 if __name__ == "__main__":
-    # Example usage:
-    # patients = [(1, r"path_to_patient1.mat"), (2, r"path_to_patient2.mat")]
-    # run_patients_parallel(patients)
-    pass
+    # Set the patients to process as (patient_number, path_to_mat_file) tuples
+    patients = [
+        # (1, r"C:\path\to\patient1_ConvertedData_noTables.mat"),
+        # (4, r"C:\path\to\patient4_ConvertedData_noTables.mat"),
+    ]
+
+    # Run all specified patients in parallel
+    run_patients_parallel(patients)
 
 # channel1_all_data = data['VowelsCellArray'][:, 0]  # first electrode
 # channel2_all_data = data['VowelsCellArray'][:, 1]  # second
