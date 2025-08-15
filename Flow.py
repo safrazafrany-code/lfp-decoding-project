@@ -16,12 +16,13 @@ import time
 import seaborn as sns  # pip install seaborn
 from sklearn.metrics import confusion_matrix
 from concurrent.futures import ProcessPoolExecutor, as_completed
+from pathlib import Path
 
 import os
 os.environ["KMP_DUPLICATE_LIB_OK"] = "True"
 
 # Base directory for all result folders
-BASE_OUTPUT_DIR = r"C:\\Users\\safra\\Documents\\לימודים\\פרויקט קיץ 2025\\DeepLearningProject-master-ido"
+BASE_OUTPUT_DIR = Path(r"C:\Users\safra\Documents\לימודים\פרויקט קיץ 2025\DeepLearningProject-master-ido")
 
 
 # --------------------------------------- Global Parameters -----------------------------------------------------
@@ -106,7 +107,7 @@ ICA_flag = False
 dropout_flag = False
 p_dropout = 0.5  # chance to zero the neuron
 
-data = scipy.io.loadmat(patientData)
+data = None  # Loaded for each patient inside ``run_patient``
 '''
 data contains 2 fields - ImageryCellArray, VowelsCellArray.
 Each is a table 5X3, where the first column is an array of the first electrode, the second column is second electrode,
@@ -1038,15 +1039,16 @@ def main_lstm(data):
 # ----------------------------------------------main----------------------------------------------------------
 
 def save_confusion_matrix(cm, labels, path_base):
+    path_base = Path(path_base)
     plt.figure(figsize=(4, 3))
     sns.heatmap(cm, annot=True, fmt=".1f", cmap="Blues", xticklabels=labels, yticklabels=labels)
     plt.xlabel("Predicted Label")
     plt.ylabel("Actual Label")
     plt.title("Confusion Matrix", fontweight='bold', fontsize=13)
-    plt.savefig(path_base + ".png", dpi=300, bbox_inches='tight')
+    plt.savefig(path_base.with_suffix(".png"), dpi=300, bbox_inches='tight')
     plt.close()
     cm_df = pd.DataFrame(cm, index=labels, columns=labels)
-    cm_df.to_excel(path_base + ".xlsx", index=True)
+    cm_df.to_excel(path_base.with_suffix(".xlsx"), index=True)
 
 
 def run_patient(patient_number, data_path):
@@ -1076,16 +1078,16 @@ def run_patient(patient_number, data_path):
 
     timestamp = time.strftime("%Y%m%d-%H%M%S")
     folder_name = f"patient{patient_number}_{timestamp}_{accuracy:.2f}"
-    output_dir = os.path.join(BASE_OUTPUT_DIR, folder_name)
-    os.makedirs(output_dir, exist_ok=True)
+    output_dir = BASE_OUTPUT_DIR / folder_name
+    output_dir.mkdir(parents=True, exist_ok=True)
 
-    results_df.to_excel(os.path.join(output_dir, "results.xlsx"), index=False)
-    with open(os.path.join(output_dir, "accuracy.txt"), "w") as f:
+    results_df.to_excel(output_dir / "results.xlsx", index=False)
+    with open(output_dir / "accuracy.txt", "w") as f:
         f.write(f"{accuracy:.2f}")
-    save_confusion_matrix(conf_mat, label_order, os.path.join(output_dir, "conf_matrix"))
+    save_confusion_matrix(conf_mat, label_order, output_dir / "conf_matrix")
 
     if save_new_model:
-        save_model(lstm, optimizer, os.path.join(output_dir, "model.pth"))
+        save_model(lstm, optimizer, output_dir / "model.pth")
 
     return patient_number, accuracy
 
