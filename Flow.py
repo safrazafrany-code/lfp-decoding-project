@@ -15,6 +15,7 @@ from scipy.signal import welch
 import time
 import seaborn as sns  # pip install seaborn
 from sklearn.metrics import confusion_matrix
+from concurrent.futures import ProcessPoolExecutor, as_completed
 
 import os
 os.environ["KMP_DUPLICATE_LIB_OK"] = "True"
@@ -25,14 +26,12 @@ patientData = r"C:\Users\asus\OneDrive\מסמכים\לימודים\פרויקט 
 # patientData = r"C:\Users\OneDrive\FinalProject\Recordings\patient2_ConvertedData_noTables.mat"
 
 patient_num = 4
-result_str = "patient"+str(patient_num)+"_Wl_"  # for the main: text to add in the saved files
 
 use_saved_model = False
 load_path = " .pth"  # "patient1_optimization_second_trymodel.pth"
 # for evaluation: update load_path and the hyper parameters of the model below!
 
 save_new_model = True
-save_path = result_str+"model.pth"
 
 # Hyper parameters
 epoches = 25  # Recommended: 30 for small datasets. for patients 4/5: 100 # for 2 vowels: 40
@@ -970,98 +969,123 @@ def main_lstm(data):
     # set up training set and dataloader
     train_dataset = patient_TrainingDataset(dict_patient1)
 
-    all_results_df = pd.DataFrame()
-    all_validation_results_df = pd.DataFrame()
+    sampler = StratifiedBatchSampler(train_dataset, batch_size=batch_size,
+                                     num_labels=len(possibls_classifications))  # 1+5= num of vowels in the dataset
+    dataloader = DataLoader(dataset=train_dataset, sampler=sampler, batch_size=1)  # , num_workers=1)
 
-    for index in range(1, 2):  # Optimization loop, not used now
+    # Set up the LSTM
+    lstm = LSTM(input_tensor_size, hidden_state_size, output_size, batch_size, num_lstm_layers)
+    optimizer = torch.optim.Adam(lstm.parameters(), lr=learning_rate, betas=(0.9, 0.999), eps=1e-08)
 
-        sampler = StratifiedBatchSampler(train_dataset, batch_size=batch_size,
-                                         num_labels=len(possibls_classifications))  # 1+5= num of vowels in the dataset
-        dataloader = DataLoader(dataset=train_dataset, sampler=sampler, batch_size=1)  # , num_workers=1)
+    if use_saved_model:
+        load_model(lstm, optimizer, load_path)
 
-        # Set up the LSTM
-        lstm = LSTM(input_tensor_size, hidden_state_size, output_size, batch_size, num_lstm_layers)
-        optimizer = torch.optim.Adam(lstm.parameters(), lr=learning_rate, betas=(0.9, 0.999), eps=1e-08)
+    # Batches Training Loop
+    num_of_training_trials = len(train_dataset)
+    n_iterations = math.ceil(num_of_training_trials / batch_size)  # iterations per epoch
 
-        if use_saved_model:
-            load_model(lstm, optimizer, load_path)
+    all_losses = []
+    plot_steps = 20
 
-        # Batches Training Loop
-        num_of_training_trials = len(train_dataset)
-        n_iterations = math.ceil(num_of_training_trials/batch_size)  # iterations per epoch
+    lstm.train()
+    for epoch in range(epoches):
+        epoch_loss = 0
+        for i_batch, (inputs, labels) in enumerate(dataloader):  # this will run n_iterations times every epoch
+            inputs = inputs.squeeze(0)  # remove dim 0 which len is 1, cause of sampler+dataloader
+            labels = labels.squeeze(0)
 
-        all_losses = []
-        plot_steps = 20
+            actual_batch_size = inputs.shape[0]  # for the case of residual batch if 35 is not divisible by batch size
+            hidden = lstm.init_hidden(batch_size=actual_batch_size)  # Initialize the hidden state for the current batch
+            optimizer.zero_grad()  # Zero the gradients
 
-        lstm.train()
-        for epoch in range(epoches):
-            epoch_loss = 0
-            for i_batch, (inputs, labels) in enumerate(dataloader):  # this will run n_iterations times every epoch
-                inputs = inputs.squeeze(0)  # remove dim 0 which len is 1, cause of sampler+dataloader
-                labels = labels.squeeze(0)
+            outputs, hidden = lstm(inputs, hidden)
 
-                actual_batch_size = inputs.shape[0]  # for the case of residual batch if 35 is not divisible by batch size
-                hidden = lstm.init_hidden(batch_size=actual_batch_size)  # Initialize the hidden state for the current batch
-                optimizer.zero_grad()  # Zero the gradients
+            loss = criterion(outputs, labels[:, 0, :])  # does labels need to be  labels[:,0,:] ??
+            loss.backward()  # Backward pass
+            optimizer.step()  # Update the weights
 
-                outputs, hidden = lstm(inputs, hidden)
+            epoch_loss += loss.item()  # Accumulate the loss for reporting
 
-                loss = criterion(outputs, labels[:, 0, :])  # does labels need to be  labels[:,0,:] ??
-                loss.backward()  # Backward pass
-                optimizer.step()  # Update the weights
+            if (i_batch + 1) % plot_steps == 0:  # Print loss every `plot_steps` batches
+                print(
+                    f"Epoch [{epoch + 1}/{epoches}], Step [{i_batch + 1}/{n_iterations}], Loss: {loss.item():.4f}")
 
-                epoch_loss += loss.item()  # Accumulate the loss for reporting
+        # Track average loss for the epoch
+        avg_epoch_loss = epoch_loss / n_iterations
+        all_losses.append(avg_epoch_loss)
+        print(f"Epoch [{epoch + 1}/{epoches}] completed with Average Loss: {avg_epoch_loss:.4f}")
 
-                if (i_batch + 1) % plot_steps == 0:  # Print loss every `plot_steps` batches
-                    print(
-                        f"Epoch [{epoch + 1}/{epoches}], Step [{i_batch + 1}/{n_iterations}], Loss: {loss.item():.4f}")
+    print("Training completed")
 
-            # Track average loss for the epoch
-            avg_epoch_loss = epoch_loss / n_iterations
-            all_losses.append(avg_epoch_loss)
-            print(f"Epoch [{epoch + 1}/{epoches}] completed with Average Loss: {avg_epoch_loss:.4f}")
-
-        print("Training completed")
-
-        # Plot the training loss
-        plt.figure()
-        plt.plot(all_losses)
-        plt.title("Training Loss")
-        plt.xlabel("Steps")
-        plt.ylabel("Loss")
-        plt.show()
+    # Plot the training loss
+    plt.figure()
+    plt.plot(all_losses)
+    plt.title("Training Loss")
+    plt.xlabel("Steps")
+    plt.ylabel("Loss")
+    plt.show()
 
     # ------------------------------------------------------Testing---------------------------------------------------
-        test_set = patient_Testset(dict_patient1)
-        accuracy, results_df, conf_mat, label_order = calculate_accuracy_lstm(lstm, test_set) # TODO- treat conf_mat?
-        all_results_df = pd.concat([all_results_df, results_df], axis=1)
+    test_set = patient_Testset(dict_patient1)
+    accuracy, results_df, conf_mat, label_order = calculate_accuracy_lstm(lstm, test_set)  # TODO- treat conf_mat?
 
-        validation_accuracy, results_df_valid, conf_mat, label_order = calculate_accuracy_lstm(lstm, train_dataset) # TODO- treat conf_mat?
-        all_validation_results_df = pd.concat([all_validation_results_df, results_df_valid], axis=1)
+    return lstm, optimizer, accuracy, results_df, conf_mat, label_order
 
-    excel_file = result_str+"Test_lstm_BS=" + str(batch_size) + "_lr=" + str(learning_rate) + ".xlsx"
-    excel_file_val = result_str+"Validate_lstm_BS=" + str(batch_size) + "_lr=" + str(learning_rate) + ".xlsx"
-    all_results_df.to_excel(excel_file, index=False)
-    all_validation_results_df.to_excel(excel_file_val, index=False)
-
-
-    if save_new_model:
-        save_model(lstm, optimizer, save_path)
-
-    print(results_df)
 
 # ----------------------------------------------main----------------------------------------------------------
 
-# main_lstm(data)
-# optimizeLoop(patient_num)
-# evaluate_model(load_path, patient_num, hidden_state_size, batch_size, learning_rate, ICA_filter_comp, epoches)
-create_n_run_models(epoches, num_lstm_layers, batch_size, learning_rate, hidden_state_size, ICA_filter_comp, patient_num, vowels_toRun)
+def save_confusion_matrix(cm, labels, path_base):
+    plt.figure(figsize=(4, 3))
+    sns.heatmap(cm, annot=True, fmt=".1f", cmap="Blues", xticklabels=labels, yticklabels=labels)
+    plt.xlabel("Predicted Label")
+    plt.ylabel("Actual Label")
+    plt.title("Confusion Matrix", fontweight='bold', fontsize=13)
+    plt.savefig(path_base + ".png", dpi=300, bbox_inches='tight')
+    plt.close()
+    cm_df = pd.DataFrame(cm, index=labels, columns=labels)
+    cm_df.to_excel(path_base + ".xlsx", index=True)
 
-# dict_patient1 = create_patient_dict(data['VowelsCellArray'])
-# plot_error_graph(dict_patient1, possibls_classifications)
+
+def run_patient(patient_number, data_path):
+    global patientData, patient_num, noise_components
+    patientData = data_path
+    patient_num = patient_number
+    noise_components = components[patient_num - 1]
+
+    data = scipy.io.loadmat(patientData)
+    lstm, optimizer, accuracy, results_df, conf_mat, label_order = main_lstm(data)
+
+    timestamp = time.strftime("%Y%m%d-%H%M%S")
+    folder_name = f"patient{patient_number}_{timestamp}_{accuracy:.2f}"
+    output_dir = os.path.join("results", folder_name)
+    os.makedirs(output_dir, exist_ok=True)
+
+    results_df.to_excel(os.path.join(output_dir, "results.xlsx"), index=False)
+    with open(os.path.join(output_dir, "accuracy.txt"), "w") as f:
+        f.write(f"{accuracy:.2f}")
+    save_confusion_matrix(conf_mat, label_order, os.path.join(output_dir, "conf_matrix"))
+
+    if save_new_model:
+        save_model(lstm, optimizer, os.path.join(output_dir, "model.pth"))
+
+    return patient_number, accuracy
+
+
+def run_patients_parallel(patients):
+    with ProcessPoolExecutor() as executor:
+        futures = [executor.submit(run_patient, num, path) for num, path in patients]
+        for future in as_completed(futures):
+            patient, acc = future.result()
+            print(f"Patient {patient} finished with accuracy {acc:.2f}%")
 
 
 # ----------------------------------------------- draft ---------------------------------------------------
+
+if __name__ == "__main__":
+    # Example usage:
+    # patients = [(1, r"path_to_patient1.mat"), (2, r"path_to_patient2.mat")]
+    # run_patients_parallel(patients)
+    pass
 
 # channel1_all_data = data['VowelsCellArray'][:, 0]  # first electrode
 # channel2_all_data = data['VowelsCellArray'][:, 1]  # second
